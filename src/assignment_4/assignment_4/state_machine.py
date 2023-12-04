@@ -60,24 +60,28 @@ class State_Machine(Node):
         self._RRT._set_logger(self.get_logger())
         self._vis_path = None
 
+
         self.max_lin_vel = 0.3
         self.max_ang_vel = 0.4
-        self.lin_err = 0.1
-        self.ang_err = math.pi/30
+        self.lin_err = 0.1 # acceptable error for linear dif
+        self.ang_err = math.pi/30 # acceptable error for angular dif
 
         self._subscriber = self.create_subscription(Odometry, "/odom", self._listener_callback, 1)
         self._publisher = self.create_publisher(Twist, "/cmd_vel", 1)
 
+        # task pose
         self._task_x = 3.0
         self._task_y = 1.5
         self._task_theta = math.pi/3
-        self._path = []
-        self._cur_goal = -1
+        self._path = [] # path to reach task
+        self._cur_goal = -1 # counter for indexes of path
 
+        # task description
         self._row_length = 1.0 
         self._row_offset = 0.5
-        self._rows_til_now = 1
+        self._rows_til_now = 1 #counter for number of rows covered
 
+        # variables do the task proprly
         self._start_x = 0.0
         self._start_y = 0.0
         self._new_head = 0.0
@@ -88,7 +92,7 @@ class State_Machine(Node):
         self._cur_y = 0.0
         self._cur_theta = 0.0
         self._lawn_states = LAWN_STATES
-        self._deploy_x = 0.0
+        self._deploy_x = 0.0 #start pose
         self._deploy_y = 0.0
         self._cur_state = FSM_STATES.AT_START
         self._start_time = self.get_clock().now().nanoseconds * 1e-9
@@ -108,6 +112,7 @@ class State_Machine(Node):
         return turn
 
     def _drive_to_goal(self, goal_x, goal_y, goal_theta=None):
+        # takse you to goal pose, if no theta is given, keeps facing the way it did to reach goal
         twist = Twist()
 
         x_diff = goal_x - self._cur_x
@@ -156,14 +161,17 @@ class State_Machine(Node):
             dist = math.sqrt((self._cur_x-self._start_x)**2 + (self._cur_y-self._start_y)**2)
             
             if abs(dist - row_length)>self.lin_err:
+                #go forward
                 twist.linear.x = min(self.max_lin_vel, 5*dist)
                 self._publisher.publish(twist)
             else:
                 if self._rows_til_now == num_rows:
+                    #if this was the last row, exit
                     self._lawn_states = LAWN_STATES.RETURN
                     return False
                 self._lawn_states = LAWN_STATES.TURN_1
                
+                #turn 90 deg left or right (depending on self._dir)
                 self._new_head = self._new_head + self._dir*np.pi/2
                 if self._new_head > np.pi:
                     self._new_head -=2*np.pi
@@ -213,10 +221,10 @@ class State_Machine(Node):
                 return False
             else:
                 self._lawn_states = LAWN_STATES.DO_ROW
-                self._rows_til_now += 1
+                self._rows_til_now += 1 #increment rows done
                 self._start_x = self._cur_x
                 self._start_y = self._cur_y
-                self._dir *= -1
+                self._dir *= -1 #change the direction of turning
             return False
 
         elif self._lawn_states == LAWN_STATES.RETURN:
@@ -231,6 +239,7 @@ class State_Machine(Node):
         now = self.get_clock().now().nanoseconds * 1e-9
         if now > (self._start_time + 1):
             self._cur_state = FSM_STATES.HEADING_TO_TASK
+            # find the path from here to task start
             self._vis_path, self._path = self._RRT.find_best_path([self._cur_x,self._cur_y],
                                                 [self._task_x, self._task_y])
             self._cur_goal = 1
@@ -239,8 +248,10 @@ class State_Machine(Node):
         size_path = len(self._path)
         self.get_logger().info(f'{self._cur_state} : {self._cur_goal} / {size_path}')
         if self._cur_goal != size_path:
+            #travel to each point in path until u reach the goal
             theta = None
             if self._cur_goal==size_path-1:
+                #if this is the last stop, orient towards the task direction
                 theta = self._task_theta
             goal_x, goal_y = self._path[self._cur_goal]
 
@@ -269,8 +280,10 @@ class State_Machine(Node):
         size_path = len(self._path)
         self.get_logger().info(f'{self._cur_state} : {size_path - self._cur_goal} / {size_path}')
         if self._cur_goal != -1:
+            # travel back to start
             theta = None
             if self._cur_goal==0:
+                #if you reached start, turn the way u were deployed
                 theta = self._deploy_theta
             goal_x, goal_y = self._path[self._cur_goal]
 

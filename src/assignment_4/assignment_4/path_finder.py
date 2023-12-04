@@ -20,7 +20,7 @@ class RRT:
 
         for ob in obs:
             x,y = self.scale_point([obs[ob]["x"],obs[ob]["y"]])
-            r = int((obs[ob]["r"]+given_r) * self.scale)
+            r = int((obs[ob]["r"]+given_r) * self.scale) #make obsticles "given_r" thicker
             map = cv2.circle(map, (y, x), radius=r, color=(0, 0, 0), thickness=-1)
 
 
@@ -91,9 +91,11 @@ class RRT:
         self.num_nodes = num_nodes #num of nodes
 
     def scale_point(self,point):
+        #scale from real world to image map
         return [int(point[0]*self.scale+self.t_x), int(point[1]*self.scale+self.t_y)]
 
     def inv_scale(self,point):
+        #scale from image map to real world
         return [(point[0]-self.t_x)/self.scale, (point[1]-self.t_y)/self.scale]
 
     def get_nodes(self):
